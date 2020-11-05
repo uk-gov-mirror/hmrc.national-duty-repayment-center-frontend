@@ -28,21 +28,20 @@
 @()(implicit request: Request[_], messages: Messages)
 
 @pageHint = {
-    <h2 class="govuk-heading-m" style="margin-bottom: 0.3em">
-        @messages("importerAddress.hint")
-        <p/>
+    <h2 class="heading-medium heading-medium-mb mt-0">
+        @messages("importerAddress.postCode")
     </h2>
 }
 
 @h4_1 = {
-    <strongr >
+    <span class="bold" >
         NE98 1AE
-    </strongr>
+    </span>
 }
 
 @h4_2 = {
-    <h2 class="govuk-hint">
-    @messages("importerAddressConfirmation.address")
+    <h2 class="heading-medium heading-medium-mb mt-0">
+        @messages("importerAddressConfirmation.address")
     </h2>
 }
 
@@ -52,14 +51,15 @@
 
     @components.back_link()
 
-    @components.heading("importerAddressConfirmation.heading")
-
+    <div class="mb-30">
+        @components.heading("importerAddressConfirmation.heading")
+    </div>
     @pageHint
 
     @h4_1
-    @link("", messages("importerAddressConfirmation.link1"))
-    <p/>
+        <span class="pl-05">@link("", messages("importerAddressConfirmation.link1"))</span>
     @h4_2
+
     @govukSelect(Select(
         id = "sort",
         name = "sort",
@@ -79,9 +79,8 @@
             )
         )
     ))
-    <p/>
 
-    @link("", messages("importerAddressConfirmation.link2"))
+    <p>@link("", messages("importerAddressConfirmation.link2"))</p>
 
     @components.submit_button()
 }
