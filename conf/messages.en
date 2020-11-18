@@ -366,6 +366,8 @@ additionalFileUpload.error.required = Select additionalFileUpload
 
 contactByEmail.title = Can we contact you by email?
 contactByEmail.heading = Can we contact you by email?
+contactByEmail.hint1 = We will use this to contact you about this application.
+contactByEmail.hint2 = If you select 'No' we will only contact you by post and telephone.
 contactByEmail.01 = Yes
 contactByEmail.02 = No
 contactByEmail.checkYourAnswersLabel = ContactByEmail
