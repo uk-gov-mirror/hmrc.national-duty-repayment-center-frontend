@@ -37,12 +37,19 @@
 
         @components.error_summary(form.errors)
 
-        @components.input_radio(
-            field = form("value"),
-            legend = messages("numberOfEntriesType.heading"),
-            headingIsLegend = true,
-            inputs = NumberOfEntriesType.options.toSeq
-        )
+
+
+        <fieldset>
+            <legend class="">
+                @components.heading(messages("numberOfEntriesType.heading"))
+            </legend>
+
+            @components.input_radio_group(
+            form("value"),
+            Seq("one" -> Messages("numberOfEntriesType.01"), "more" -> Messages("numberOfEntriesType.02")),
+            Symbol("more") -> messages("numberOfEntriesType.02.hint")
+            )
+        </fieldset>
 
         @components.submit_button()
     }
