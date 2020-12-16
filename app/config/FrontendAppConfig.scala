@@ -54,4 +54,9 @@ class FrontendAppConfig @Inject() (configuration: Configuration) {
 
   def routeToSwitchLanguage: String => Call =
     (lang: String) => routes.LanguageSwitchController.switchToLanguage(lang)
+
+  val trackingConsentUrl: String =
+    configuration.get[String]("tracking-consent-frontend.url")
+
+  val gtmContainer: String = configuration.get[String]("tracking-consent-frontend.gtm.container")
 }

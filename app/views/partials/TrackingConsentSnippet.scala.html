@@ -1,0 +1,12 @@
+@this()
+
+@()(implicit appConfig: FrontendAppConfig, messages: Messages)
+
+<!--[if !IE]>-->
+<script
+        src="@appConfig.trackingConsentUrl"
+        id="tracking-consent-script-tag"
+        data-gtm-container="@appConfig.gtmContainer"
+        data-language="@messages.lang.code"
+></script>
+<!--<![endif]-->

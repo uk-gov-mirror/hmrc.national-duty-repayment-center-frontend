@@ -17,6 +17,7 @@
 @import uk.gov.hmrc.govukfrontend.views.html.components._
 @import uk.gov.hmrc.hmrcfrontend.views.html.components._
 @import views.components.FooterLinks
+@import uk.gov.hmrc.play.views.html.layouts.TrackingConsentSnippet
 
 @this(
         govukLayout: GovukLayout,
@@ -26,7 +27,8 @@
         link: components.legacy.link,
         hmrcTimeoutDialog : HmrcTimeoutDialog,
         reportAProblemLink: ReportAProblemLink,
-        appConfig: config.FrontendAppConfig
+        appConfig: config.FrontendAppConfig,
+        trackingConsentSnippet: TrackingConsentSnippet
 )
 
 @(
@@ -38,6 +40,9 @@ backLink: Option[String] =None,
 refresh: Int = 0)(contentBlock: Html)(implicit request: Request[_], messages: Messages)
 
 @head = {
+
+@trackingConsentSnippet(nonce = None)
+
   <meta name="format-detection" content="telephone=no">
     <!--[if lte IE 8]><link href="@controllers.routes.Assets.versioned("stylesheets/application-ie-8.css")" rel="stylesheet" type="text/css" /><![endif]-->
     <!--[if gt IE 8]><!-->
