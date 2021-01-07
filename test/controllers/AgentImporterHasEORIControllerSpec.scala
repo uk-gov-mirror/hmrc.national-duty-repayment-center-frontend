@@ -43,7 +43,7 @@ class AgentImporterHasEORIControllerSpec extends SpecBase with MockitoSugar {
   val formProvider = new AgentImporterHasEORIFormProvider()
   val form = formProvider()
 
-  "AgentImporterHasEORI Controller" must {
+  "AgentImporterHasEORI Controller" should {
 
     "return OK and the correct view for a GET" in {
 
