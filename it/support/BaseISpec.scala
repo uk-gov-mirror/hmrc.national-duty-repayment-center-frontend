@@ -9,12 +9,12 @@ import play.api.test.FakeRequest
 import play.api.test.Helpers._
 import play.twirl.api.HtmlFormat
 import stubs.{AuthStubs, DataStreamStubs}
+import config.FrontendAppConfig
 import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.HeaderCarrierConverter
-import config.FrontendAppConfig
 
 abstract class BaseISpec
-    extends UnitSpec with WireMockSupport with AuthStubs with DataStreamStubs with MetricsTestSupport {
+  extends UnitSpec with WireMockSupport with AuthStubs with DataStreamStubs with MetricsTestSupport {
 
   import scala.concurrent.duration._
   override implicit val defaultTimeout: FiniteDuration = 5 seconds

@@ -1,5 +1,6 @@
 import play.sbt.routes.RoutesKeys
 import sbt.Def
+import sbt.Tests.{Group, SubProcess}
 import scoverage.ScoverageKeys
 import uk.gov.hmrc.DefaultBuildSettings
 import uk.gov.hmrc.versioning.SbtGitVersioning.autoImport.majorVersion
@@ -73,6 +74,15 @@ lazy val root = (project in file("."))
     includeFilter in uglify := GlobFilter("nationaldutyrepaymentcenterfrontend-*.js"),
     includeFilter in uglify := GlobFilter("application.js")
   )
+  .configs(IntegrationTest)
+  .settings(
+    Keys.fork in IntegrationTest := false,
+    Defaults.itSettings,
+    unmanagedSourceDirectories in IntegrationTest += baseDirectory(_ / "it").value,
+    parallelExecution in IntegrationTest := false,
+    testGrouping in IntegrationTest := oneForkedJvmPerTest((definedTests in IntegrationTest).value),
+    majorVersion := 0
+  )
 
 lazy val testSettings: Seq[Def.Setting[_]] = Seq(
   fork        := true,
@@ -82,3 +92,13 @@ lazy val testSettings: Seq[Def.Setting[_]] = Seq(
 )
 
 dependencyOverrides ++= AppDependencies.overrides
+
+
+def oneForkedJvmPerTest(tests: Seq[TestDefinition]) =
+  tests.map { test =>
+    new Group(
+      test.name,
+      Seq(test),
+      SubProcess(ForkOptions().withRunJVMOptions(Vector(s"-Dtest.name=${test.name}")))
+    )
+  }

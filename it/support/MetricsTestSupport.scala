@@ -3,10 +3,10 @@ package support
 import com.codahale.metrics.MetricRegistry
 import com.kenshoo.play.metrics.Metrics
 import org.scalatest.Suite
-import org.scalatest.matchers.should.Matchers
 import play.api.Application
 
 import scala.collection.JavaConverters
+import org.scalatest.matchers.should.Matchers
 
 trait MetricsTestSupport {
   self: Suite with Matchers =>

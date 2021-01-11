@@ -46,7 +46,7 @@ case class TestAppConfig(wireMockBaseUrl: String, wireMockPort: Int) extends Fro
   override val loginUrl: String = wireMockBaseUrl
   override val loginContinueUrl: String = wireMockBaseUrl
   override val languageTranslationEnabled: Boolean = true
-  override val routeToSwitchLanguage: String => Call = (lang: String) => controllers.routes.LanguageController.switchToLanguage(lang)
+  override val routeToSwitchLanguage: String => Call = (lang: String) => controllers.routes.LanguageSwitchController.switchToLanguage(lang)
 
   override def languageMap: Map[String, Lang] = Map(
     "english" -> Lang("en"),
