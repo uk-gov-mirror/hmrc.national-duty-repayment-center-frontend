@@ -69,10 +69,10 @@ class FrontendAppConfigImpl @Inject()(configuration: Configuration) extends Fron
   override val addressLookupServiceUrl: String = configuration.get[Service]("microservice.services.address-lookup").baseUrl
   override val timeout: Int = configuration.get[Int]("timeout.timeout")
   override val countdown: Int = configuration.get[Int]("timeout.countdown")
-  override val authUrl: String = configuration.get[Service]("auth").baseUrl
+  override val authUrl: String = configuration.get[Service]("microservice.services.auth").baseUrl
   override val loginUrl: String = configuration.get[String]("urls.login")
   override val loginContinueUrl: String = configuration.get[String]("urls.loginContinue")
-  override val upscanInitiateBaseUrl: String = configuration.get[Service]("upscan-initiate").baseUrl
+  override val upscanInitiateBaseUrl: String = configuration.get[Service]("microservice.services.upscan-initiate").baseUrl
   override val languageTranslationEnabled: Boolean =
     configuration.get[Boolean]("microservice.services.features.welsh-translation")
 
