@@ -16,7 +16,6 @@
 
 package controllers
 
-import connectors.AddressLookupConnector
 import controllers.actions._
 import forms.{AddressSelectionFormProvider, AgentImporterAddressFormProvider, PostcodeFormProvider}
 import javax.inject.Inject

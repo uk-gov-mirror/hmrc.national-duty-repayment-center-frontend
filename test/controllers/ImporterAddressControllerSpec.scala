@@ -17,7 +17,6 @@
 package controllers
 
 import base.SpecBase
-import connectors.AddressLookupConnector
 import forms.{AddressSelectionFormProvider, ImporterAddressFormProvider, PostcodeFormProvider}
 import models.responses.{AddressLookupResponseModel, Location, LookedUpAddress, LookedUpAddressWrapper, Uprn}
 import models.results.UnexpectedResponseStatus

@@ -17,8 +17,6 @@
 package connectors
 
 import config.FrontendAppConfig
-import connectors.httpparsers.AddressLookupHttpParser
-import connectors.httpparsers.AddressLookupHttpParser.AddressLookupResponse
 import javax.inject.Inject
 import models.PostcodeLookup
 import play.api.http.HeaderNames
