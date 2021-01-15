@@ -92,6 +92,7 @@ lazy val itSettings = Defaults.itSettings ++ Seq(
   parallelExecution            := false,
   fork                         := true,
   javaOptions                  ++= Seq(
-    "-Dconfig.resource=it.application.conf"
+    "-Dconfig.resource=it.application.conf",
+    "-Dlogger.resource=it.logback.xml"
   )
 )
