@@ -28,7 +28,14 @@ object AppDependencies {
     "com.github.tomakehurst"  %  "wiremock-standalone"  % "2.26.3"
   ).map(_ % Test)
 
-  def apply(): Seq[ModuleID] = compile ++ test
+  val itTest = Seq(
+    "org.scalatest"          %% "scalatest"          % "3.2.3",
+    "org.scalatestplus.play" %% "scalatestplus-play" % "4.0.3",
+    "com.github.tomakehurst"  % "wiremock-jre8"      % "2.27.2",
+    "com.vladsch.flexmark"    % "flexmark-all"       % "0.36.8"
+  ).map(_ % IntegrationTest)
+
+  def apply(): Seq[ModuleID] = compile ++ test ++ itTest
 
   val akkaVersion = "2.5.23"
   val akkaHttpVersion = "10.0.15"

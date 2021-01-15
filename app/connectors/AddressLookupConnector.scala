@@ -16,6 +16,8 @@
 
 package connectors
 
+import connectors.httpparsers.AddressLookupHttpParser
+import connectors.httpparsers.AddressLookupHttpParser.AddressLookupResponse
 import config.FrontendAppConfig
 import javax.inject.Inject
 import models.PostcodeLookup
@@ -31,7 +33,7 @@ class AddressLookupConnector @Inject()(httpClient: HttpClient)
 
   def addressLookup(query: PostcodeLookup)
                    (implicit hc: HeaderCarrier): Future[AddressLookupResponse] = {
-    lazy val url = appConfig.addressLookupServiceUrl.baseUrl + "/v2/uk/addresses"
+    lazy val url = appConfig.addressLookupServiceUrl + "/v2/uk/addresses"
 
     val urlParams = Seq(
       Some("postcode" -> query.postCodeTrimmed)

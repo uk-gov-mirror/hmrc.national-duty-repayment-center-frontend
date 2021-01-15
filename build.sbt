@@ -73,6 +73,8 @@ lazy val root = (project in file("."))
     includeFilter in uglify := GlobFilter("nationaldutyrepaymentcenterfrontend-*.js"),
     includeFilter in uglify := GlobFilter("application.js")
   )
+  .configs(IntegrationTest)
+  .settings(inConfig(IntegrationTest)(itSettings): _*)
 
 lazy val testSettings: Seq[Def.Setting[_]] = Seq(
   fork        := true,
@@ -82,3 +84,14 @@ lazy val testSettings: Seq[Def.Setting[_]] = Seq(
 )
 
 dependencyOverrides ++= AppDependencies.overrides
+
+lazy val itSettings = Defaults.itSettings ++ Seq(
+  unmanagedSourceDirectories   := Seq(
+    baseDirectory.value / "it"
+  ),
+  parallelExecution            := false,
+  fork                         := true,
+  javaOptions                  ++= Seq(
+    "-Dconfig.resource=it.application.conf"
+  )
+)

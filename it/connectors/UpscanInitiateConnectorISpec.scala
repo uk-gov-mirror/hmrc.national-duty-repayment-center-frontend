@@ -1,7 +1,7 @@
 package connectors
 
 import play.api.Application
-import stubs.{DataStreamStubs, UpscanInitiateStubs}
+import stubs.UpscanInitiateStubs
 import support.AppISpec
 import uk.gov.hmrc.http._
 
@@ -13,15 +13,14 @@ class UpscanInitiateConnectorISpec extends UpscanInitiateConnectorISpecSetup {
     "/upscan/v2/initiate" should {
       "return upload request metadata" in {
 
-        //givenUpscanInitiateSucceeds("https://myservice.com/callback")
-        //givenAuditConnector()
+        givenUpscanInitiateSucceeds("https://myservice.com/callback")
 
-        //val result: UpscanInitiateResponse =
-         // await(connector.initiate(UpscanInitiateRequest(callbackUrl = "https://myservice.com/callback")))
+        val result: UpscanInitiateResponse =
+         await(connector.initiate(UpscanInitiateRequest(callbackUrl = "https://myservice.com/callback")))
 
-        //result.reference shouldBe "11370e18-6e24-453e-b45a-76d3e32ea33d"
-        //result.uploadRequest.href shouldBe testUploadRequest.href
-        //result.uploadRequest.fields.toSet should contain theSameElementsAs (testUploadRequest.fields.toSet)
+        result.reference shouldBe "11370e18-6e24-453e-b45a-76d3e32ea33d"
+        result.uploadRequest.href shouldBe testUploadRequest.href
+        result.uploadRequest.fields.toSet should contain theSameElementsAs (testUploadRequest.fields.toSet)
 
       }
     }
@@ -29,7 +28,7 @@ class UpscanInitiateConnectorISpec extends UpscanInitiateConnectorISpecSetup {
 
 }
 
-trait UpscanInitiateConnectorISpecSetup extends AppISpec with UpscanInitiateStubs with DataStreamStubs {
+trait UpscanInitiateConnectorISpecSetup extends AppISpec with UpscanInitiateStubs {
 
   implicit val hc: HeaderCarrier = HeaderCarrier()
 

@@ -16,8 +16,9 @@
 
 package services
 
+import connectors.NDRCConnector
 import javax.inject.Inject
-import models.{ClaimId, UserAnswers}
+import models.UserAnswers
 import models.requests.{AmendClaimRequest, CreateClaimRequest, DataRequest}
 import models.responses.ClientClaimSuccessResponse
 import uk.gov.hmrc.http.HeaderCarrier
