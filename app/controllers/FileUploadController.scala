@@ -16,7 +16,7 @@
 
 package controllers
 
-import akka.actor.{Actor, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props}
 import config.FrontendAppConfig
 import connectors.{UpscanInitiateConnector, UpscanInitiateRequest}
 import controllers.actions._
@@ -27,7 +27,7 @@ import play.api.data.Form
 import play.api.data.Forms.{mapping, nonEmptyText, optional, text}
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json.Json
-import play.api.mvc._
+import play.api.mvc.{request, _}
 import play.mvc.Http.HeaderNames
 import repositories.SessionRepository
 import services._
@@ -63,30 +63,41 @@ class FileUploadController @Inject()(
   case class SessionState(state: Option[FileUploadState], userAnswers: Option[UserAnswers])
 
   val system = akka.actor.ActorSystem("system")
-  case class Greet(to: String, by: String)
-  case class Greeted(msg: String)
-  class Greetings extends Actor {
+  case class ChekcState(userAnswers: UserAnswers, request: Request[_])
+
+  class CheckStateActor extends Actor {
     override def receive: Receive = {
-      case greet: Greet =>
-        sender ! Greeted(s"${greet.by}: Hello, ${greet.to}")
-    }
-  }
+      case ChekcState(u, r) => u.fileUploadState match {
+        case Some(s@WaitingForFileVerification(_, _, _, _)) =>
+          applyTransition(s, Some(u), waitForFileVerification)
 
-  val greeter = system.actorOf(Props(classOf[Greetings]))
-  val greeting = Greet("Detective","Lucifer")
-  system.scheduler.scheduleOnce(5.seconds, greeter, greeting)
-
-  // GET /file-verification
-  final def showWaitingForFileVerification = {
-    (identify andThen getData andThen requireData).async { implicit request =>
-      Thread.sleep(INITIAL_CALLBACK_WAIT_TIME_MILLIS)
-      val answers = request.userAnswers
-      answers.fileUploadState match {
-        case Some(s) => applyTransition(s, Some(answers), waitForFileVerification).map(ns => renderState(ns))
-        case None => Future.successful(InternalServerError("Missing file upload state"))
+        case Some(s@FileUploaded(_, _)) => renderState(s)(r)
       }
     }
   }
+
+  class ScheduleOnceTask @Inject() (actorSystem: ActorSystem)(implicit executionContext: ExecutionContext) {
+
+
+  val actor = system.actorOf(Props(classOf[CheckStateActor]))
+
+  // GET /file-verification
+  final def showWaitingForFileVerification = (identify andThen getData andThen requireData).async { implicit request =>
+
+    //.orApplyOnTimeout(_ => FileUploadTransitions.waitForFileVerification)
+     // .redirectOrDisplayIf[FileUploadState.WaitingForFileVerification]
+
+      system.scheduler.schedule(initialDelay = 0.seconds, 10.seconds) { () =>
+        system.log.info("Waiting for state change...")
+        val answers = request.userAnswers
+        answers.fileUploadState match {
+          case Some(s@FileUploaded(_, _)) => Future.successful(renderState(s))
+          case Some(s) => applyTransition(s, Some(answers), waitForFileVerification).map(ns => renderState(ns))
+          case None => Future.successful(InternalServerError("Missing file upload state"))
+        }
+      }(executionContext)
+    }
+
 
   // GET/async/file-verification
   final def asyncWaitingForFileVerification(id: String): Action[AnyContent] = Action.async { implicit request =>
@@ -195,7 +206,7 @@ class FileUploadController @Inject()(
   }
 
   final def successRedirect(id: String)(implicit rh: RequestHeader) = appConfig.baseExternalCallbackUrl + (rh.cookies.get(COOKIE_JSENABLED) match {
-    case Some(_) => controller.asyncWaitingForFileVerification(id)
+    case Some(_) => controller.showWaitingForFileVerification
     case None => controller.showWaitingForFileVerification
   })
 
