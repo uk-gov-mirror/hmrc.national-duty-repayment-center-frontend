@@ -20,8 +20,10 @@ import akka.actor.ActorSystem
 import com.google.inject.name.Named
 import com.google.inject.{AbstractModule, Inject, Singleton}
 import com.typesafe.config.Config
+import controllers.CheckStateActor
 import controllers.actions._
 import play.api.Configuration
+import play.api.libs.concurrent.AkkaGuiceSupport
 import play.api.libs.ws.WSClient
 import repositories.{DefaultSessionRepository, SessionRepository}
 import uk.gov.hmrc.http.hooks.HttpHook
@@ -32,12 +34,13 @@ import uk.gov.hmrc.play.http.ws.WSHttp
 
 import scala.util.matching.Regex
 
-class Module extends AbstractModule {
+class Module extends AbstractModule with AkkaGuiceSupport {
 
   override def configure(): Unit = {
     bind(classOf[HttpGet]).to(classOf[CustomHttpClient])
     bind(classOf[HttpPost]).to(classOf[CustomHttpClient])
     bind(classOf[FrontendAppConfig]).to(classOf[FrontendAppConfigImpl]).asEagerSingleton()
+    bindActor[CheckStateActor]("check-state-actor")
 
     bind(classOf[DataRetrievalAction]).to(classOf[DataRetrievalActionImpl]).asEagerSingleton()
     bind(classOf[DataRequiredAction]).to(classOf[DataRequiredActionImpl]).asEagerSingleton()
