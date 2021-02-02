@@ -15,7 +15,8 @@ object AppDependencies {
     "uk.gov.hmrc"       %% "play-whitelist-filter"          % "3.1.0-play-26",
     "uk.gov.hmrc"       %% "play-frontend-govuk"            % "0.55.0-play-26",
     "uk.gov.hmrc"       %% "play-frontend-hmrc"             % "0.26.0-play-26",
-    "com.sun.mail"      % "javax.mail"                      % "1.6.2"
+    "com.sun.mail"      % "javax.mail"                      % "1.6.2",
+    "com.typesafe.akka" %% "akka-actor"                     % "12.6.12"
   )
 
   val test = Seq(

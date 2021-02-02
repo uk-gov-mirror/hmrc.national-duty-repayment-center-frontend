@@ -1,4 +1,5 @@
-(function() {
-  window.GOVUKFrontend.initAll();
-  window.HMRCFrontend.initAll();
-}());
+import init from 'init';
+import loadComponents from 'load-components';
+
+init();
+loadComponents();

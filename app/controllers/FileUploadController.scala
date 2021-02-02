@@ -16,12 +16,12 @@
 
 package controllers
 
+import akka.actor.{Actor, Props}
 import config.FrontendAppConfig
 import connectors.{UpscanInitiateConnector, UpscanInitiateRequest}
 import controllers.actions._
 import forms.AdditionalFileUploadFormProvider
 import models.{ClaimantType, FileVerificationStatus, NormalMode, S3UploadError, UpscanNotification, UserAnswers}
-import navigation.Navigator
 import pages.ClaimantTypePage
 import play.api.data.Form
 import play.api.data.Forms.{mapping, nonEmptyText, optional, text}
@@ -35,6 +35,7 @@ import uk.gov.hmrc.play.bootstrap.controller.FrontendBaseController
 import views.html.{FileUploadView, FileUploadedView, WaitingForFileVerificationView}
 
 import javax.inject.Inject
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 
 class FileUploadController @Inject()(
@@ -61,9 +62,24 @@ class FileUploadController @Inject()(
 
   case class SessionState(state: Option[FileUploadState], userAnswers: Option[UserAnswers])
 
+  val system = akka.actor.ActorSystem("system")
+  case class Greet(to: String, by: String)
+  case class Greeted(msg: String)
+  class Greetings extends Actor {
+    override def receive: Receive = {
+      case greet: Greet =>
+        sender ! Greeted(s"${greet.by}: Hello, ${greet.to}")
+    }
+  }
+
+  val greeter = system.actorOf(Props(classOf[Greetings]))
+  val greeting = Greet("Detective","Lucifer")
+  system.scheduler.scheduleOnce(5.seconds, greeter, greeting)
+
   // GET /file-verification
   final def showWaitingForFileVerification = {
     (identify andThen getData andThen requireData).async { implicit request =>
+      Thread.sleep(INITIAL_CALLBACK_WAIT_TIME_MILLIS)
       val answers = request.userAnswers
       answers.fileUploadState match {
         case Some(s) => applyTransition(s, Some(answers), waitForFileVerification).map(ns => renderState(ns))
