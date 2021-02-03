@@ -17,7 +17,7 @@
 package controllers
 
 import akka.actor.TypedActor.{context, self}
-import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, PoisonPill, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import config.FrontendAppConfig
@@ -37,6 +37,7 @@ import services._
 import uk.gov.hmrc.play.bootstrap.controller.FrontendBaseController
 import views.html.{FileUploadView, FileUploadedView, WaitingForFileVerificationView}
 
+import java.time.LocalDateTime
 import javax.inject.{Inject, Named}
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
@@ -47,12 +48,11 @@ case class CheckState(id: String)
 
 case class StartWaitinging(id: String)
 
-case class Terminated(state: FileUploadState)
-
+case object Terminated
 //.orApplyOnTimeout(_ => FileUploadTransitions.waitForFileVerification)
 // .redirectOrDisplayIf[FileUploadState.WaitingForFileVerification]
 
-class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit ec: ExecutionContext) extends Actor with FileUploadService {
+class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit ec: ExecutionContext) extends Actor with FileUploadService with ActorLogging {
   type ConvertState = (FileUploadState) => Future[FileUploadState]
 
   import play.api.mvc.Results.Redirect
@@ -62,7 +62,7 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
       sessionRepository.get(id).flatMap(u => u.flatMap(_.fileUploadState) match {
         case Some(s@UploadFile(_, _, _, maybeUploadError)) => {
           if (maybeUploadError.nonEmpty) {
-            self ! PoisonPill
+            self ! Terminated
             println(s"exiting due to file upload error...............................................................$s")
             Future.successful(Redirect(routes.FileUploadController.showFileUpload()))
           } else {
@@ -75,10 +75,12 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
           Future.successful(Redirect(routes.FileUploadController.viewWaitingForFileVerification))
         }
         case Some(s@FileUploaded(_, _)) =>
-          self ! PoisonPill
+          self ! Terminated
           println(s"I am done ................................................................$s")
           Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
       })
+    case Terminated => log.info("Exiting scheduler.....................")
+      context.stop(self)
   }
 
   private def updateSession(newState: FileUploadState, userAnswers: Option[UserAnswers]) = {
@@ -123,14 +125,62 @@ class FileUploadController @Inject()(
 
   case class SessionState(state: Option[FileUploadState], userAnswers: Option[UserAnswers])
 
+  def waitFor(startState: FileUploadState, id: String, exitTime: LocalDateTime): Future[FileUploadState] = {
+
+    def wait(state: FileUploadState, time: LocalDateTime, done: Boolean = false): Future[FileUploadState] = {
+      println(s" ${time.isBefore(exitTime)} ${done}" )
+      if (time.isBefore(exitTime) || done) {
+        sessionState(id).flatMap { ss =>
+          ss.state match {
+            case Some(s@FileUploaded(_, _))  => {
+              println(s"state reached............................................$s")
+              wait(s, LocalDateTime.now, true)
+            }
+            case Some(s@WaitingForFileVerification(_, _, _, _)) =>  {
+              println(s"continue waiting..........................................$s")
+              wait(s, LocalDateTime.now, false)
+            }
+            case Some(s@UploadFile(_, _, _, _)) =>  {
+              println(s"turn to wait for verification and continue waiting..........$s")
+              applyTransition(s, ss.userAnswers, waitForFileVerification).flatMap( newS => wait(newS, LocalDateTime.now, false))
+            }
+          }
+        }
+      }
+      else {
+        //sessionRepository.get(id).flatMap(_.flatMap(_.fileUploadState))
+        println(s"exiting now...")
+        sessionState(id).map { ss =>
+          ss.state match {
+            case Some(s) => {
+              println(s"exiting now..with s $s")
+              s
+            }
+            case None => state
+          }
+        }
+      }
+    }
+    println("waiting for callback..............................")
+    wait(startState, LocalDateTime.now, false)
+  }
+
   // GET /file-verification
   final val showWaitingForFileVerification = (identify andThen getData andThen requireData).async { implicit request =>
-    system.scheduler.schedule(0 milliseconds, 1 nanosecond, checkStateActor, CheckState(request.internalId))
+    val startTime = LocalDateTime.now
+    val exitTime = startTime.plusSeconds(2)
     sessionState(request.internalId).flatMap { ss =>
       ss.state match {
-        case Some(s: FileUploaded) => Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
-        case Some(s: UploadFile) => Future.successful(Redirect(routes.FileUploadController.showFileUpload()))
-        case Some(s: WaitingForFileVerification) => Future.successful(Redirect(routes.FileUploadController.viewWaitingForFileVerification()))
+        case Some(s@FileUploaded(_, _) ) => {
+          println("callback arrived... and file uploaded")
+          Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
+        }
+        case Some(s) => waitFor(s, request.internalId, exitTime) map {
+          case s@FileUploaded(_, _) => Redirect(routes.FileUploadController.showFileUploaded())
+          case s@WaitingForFileVerification(_, _, _, _) => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
+          case s@UploadFile(_, _, _, _) => Redirect(routes.FileUploadController.showFileUpload())
+        }
+        case None => Future.successful(InternalServerError("dfdfdf"))
       }
     }
   }
