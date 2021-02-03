@@ -45,7 +45,7 @@
             legend = Some(messages("customsRegulationType.heading"))
         )
 
-        @html.button("site.continue")
+        @html.a(routes.BulkFileUploadController.showFileUpload.url, messages("site.continue"), useButtonStyle = true)
     }
 
 }
