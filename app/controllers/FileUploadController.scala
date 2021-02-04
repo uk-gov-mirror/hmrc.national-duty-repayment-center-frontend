@@ -16,8 +16,7 @@
 
 package controllers
 
-import akka.actor.TypedActor.{context, self}
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, PoisonPill, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.util.Timeout
 import config.FrontendAppConfig
@@ -30,7 +29,7 @@ import play.api.data.Form
 import play.api.data.Forms.{mapping, nonEmptyText, optional, text}
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json.Json
-import play.api.mvc.{request, _}
+import play.api.mvc._
 import play.mvc.Http.HeaderNames
 import repositories.SessionRepository
 import services._
@@ -41,47 +40,58 @@ import java.time.LocalDateTime
 import javax.inject.{Inject, Named}
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
-import scala.reflect.ClassTag
 
 
-case class CheckState(id: String)
+case class CheckState(id: String, currentState: FileUploadState)
+case class Terminate(state: FileUploadState)
 
-case class StartWaitinging(id: String)
-
-case object Terminated
 //.orApplyOnTimeout(_ => FileUploadTransitions.waitForFileVerification)
 // .redirectOrDisplayIf[FileUploadState.WaitingForFileVerification]
 
 class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit ec: ExecutionContext) extends Actor with FileUploadService with ActorLogging {
   type ConvertState = (FileUploadState) => Future[FileUploadState]
 
-  import play.api.mvc.Results.Redirect
-
   override def receive: Receive = {
-    case CheckState(id) =>
-      sessionRepository.get(id).flatMap(u => u.flatMap(_.fileUploadState) match {
-        case Some(s@UploadFile(_, _, _, maybeUploadError)) => {
-          if (maybeUploadError.nonEmpty) {
-            self ! Terminated
-            println(s"exiting due to file upload error...............................................................$s")
-            Future.successful(Redirect(routes.FileUploadController.showFileUpload()))
-          } else {
-            println(s"I am waiting in Upload File...............................................................$s")
-            applyTransition(s, u, waitForFileVerification).map(_ => Redirect(routes.FileUploadController.viewWaitingForFileVerification))
-          }
+    case CheckState(id, currentState) => {
+      println(s"current state is $currentState ")
+      currentState match {
+        case s@FileUploaded(_, _) => println("I am done !")
+          self ! Terminate(s)
+        case _ => {
+          log.info("Keep checking status.......................")
+          sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
+            case Some(s@FileUploaded(_, _)) => {
+              println(s"state reached............................................$s")
+              Future.successful(self ! Terminate(s))
+            }
+            case Some(s@WaitingForFileVerification(_, _, _, _)) => {
+              println(s"continue waiting..........................................$s")
+              Future.successful(self ! CheckState(id, s))
+            }
+            case Some(s@UploadFile(_, _, _, _)) => {
+              if(s.maybeUploadError.nonEmpty) {
+                println("There are errors on the file .......")
+                self ! Terminate(s)
+                Future.successful(self ! currentState)
+
+              }else {
+                println(s"State before applying transition...... ${s}")
+                println(s"turn to wait for verification and continue waiting..........$s")
+
+                applyTransition(s, ss, waitForFileVerification).map { s =>
+                  self ! CheckState(id, s)
+                }
+              }
+            }
+          })
         }
-        case Some(s@WaitingForFileVerification(_, _, _, _)) => {
-          println(s"I am waiting in WaitingForVerification................................................................$s")
-          Future.successful(Redirect(routes.FileUploadController.viewWaitingForFileVerification))
-        }
-        case Some(s@FileUploaded(_, _)) =>
-          self ! Terminated
-          println(s"I am done ................................................................$s")
-          Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
-      })
-    case Terminated => log.info("Exiting scheduler.....................")
-      context.stop(self)
+      }
+    }
+    case Terminate(finalFileUploadState) =>
+      println("terminating now....")
+      sender() ! finalFileUploadState
   }
+
 
   private def updateSession(newState: FileUploadState, userAnswers: Option[UserAnswers]) = {
     if (userAnswers.nonEmpty)
@@ -125,62 +135,26 @@ class FileUploadController @Inject()(
 
   case class SessionState(state: Option[FileUploadState], userAnswers: Option[UserAnswers])
 
-  def waitFor(startState: FileUploadState, id: String, exitTime: LocalDateTime): Future[FileUploadState] = {
-
-    def wait(state: FileUploadState, time: LocalDateTime, done: Boolean = false): Future[FileUploadState] = {
-      println(s" ${time.isBefore(exitTime)} ${done}" )
-      if (time.isBefore(exitTime) || done) {
-        sessionState(id).flatMap { ss =>
-          ss.state match {
-            case Some(s@FileUploaded(_, _))  => {
-              println(s"state reached............................................$s")
-              wait(s, LocalDateTime.now, true)
-            }
-            case Some(s@WaitingForFileVerification(_, _, _, _)) =>  {
-              println(s"continue waiting..........................................$s")
-              wait(s, LocalDateTime.now, false)
-            }
-            case Some(s@UploadFile(_, _, _, _)) =>  {
-              println(s"turn to wait for verification and continue waiting..........$s")
-              applyTransition(s, ss.userAnswers, waitForFileVerification).flatMap( newS => wait(newS, LocalDateTime.now, false))
-            }
-          }
-        }
-      }
-      else {
-        //sessionRepository.get(id).flatMap(_.flatMap(_.fileUploadState))
-        println(s"exiting now...")
-        sessionState(id).map { ss =>
-          ss.state match {
-            case Some(s) => {
-              println(s"exiting now..with s $s")
-              s
-            }
-            case None => state
-          }
-        }
-      }
-    }
-    println("waiting for callback..............................")
-    wait(startState, LocalDateTime.now, false)
-  }
-
   // GET /file-verification
   final val showWaitingForFileVerification = (identify andThen getData andThen requireData).async { implicit request =>
     val startTime = LocalDateTime.now
     val exitTime = startTime.plusSeconds(2)
+
     sessionState(request.internalId).flatMap { ss =>
       ss.state match {
-        case Some(s@FileUploaded(_, _) ) => {
-          println("callback arrived... and file uploaded")
+        case Some(s: FileUploaded) => // if callback has happened then just go to file downloaded
           Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
-        }
-        case Some(s) => waitFor(s, request.internalId, exitTime) map {
-          case s@FileUploaded(_, _) => Redirect(routes.FileUploadController.showFileUploaded())
-          case s@WaitingForFileVerification(_, _, _, _) => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
-          case s@UploadFile(_, _, _, _) => Redirect(routes.FileUploadController.showFileUpload())
-        }
-        case None => Future.successful(InternalServerError("dfdfdf"))
+        case Some(s) => // start sending check status message till upscan callback arrives or timeout happens.
+          implicit val timeout = Timeout(10 seconds);
+          (checkStateActor ? CheckState(request.internalId, s)).mapTo[FileUploadState].map { _ match {
+            case s: FileUploaded => Redirect(routes.FileUploadController.showFileUploaded())
+            case s: UploadFile => Redirect(routes.FileUploadController.showFileUpload())
+            case s: WaitingForFileVerification => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
+            case _ => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
+          }
+
+          }
+        case _ => ???
       }
     }
   }
@@ -193,7 +167,7 @@ class FileUploadController @Inject()(
     }
   }
 
-  // GET//file-verification/:id/async
+  // GET //file-verification/:id/async
   final def asyncWaitingForFileVerification(id: String): Action[AnyContent] = Action.async { implicit request =>
     Thread.sleep(INITIAL_CALLBACK_WAIT_TIME_MILLIS)
     sessionState(id).flatMap { ss =>
@@ -313,9 +287,14 @@ class FileUploadController @Inject()(
     })
 
   def applyTransition(state: FileUploadState, userAnswers: Option[UserAnswers], cs: ConvertState) = {
+    println(s"updating status from state ${state}")
+
     for {
       newState <- cs(state)
-      res <- updateSession(newState, userAnswers)
+      res <- {
+        println(s"updating status from state ${newState}")
+        synchronized(updateSession(newState, userAnswers))
+      }
       if (res)
     } yield newState
   }
