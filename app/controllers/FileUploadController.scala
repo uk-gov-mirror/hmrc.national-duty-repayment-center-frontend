@@ -57,11 +57,12 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
   override def receive: Receive = {
     case CheckState(id, currentState) => {
       println("Replying to sender..................")
+      implicit val timeout = Timeout(10 seconds);
 
       currentState match {
         case s@FileUploaded(_, _) =>
           println("I am done !")
-         sender ! s
+          Future.successful(s)
         case _ => {
           log.info("Keep checking status.......................")
           val f = sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
@@ -71,7 +72,7 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
             }
             case Some(s@WaitingForFileVerification(_, _, _, _)) => {
               println(s"continue waiting..........................................$s")
-              Future.successful(self ! CheckState(id, s))
+              (self ? CheckState(id, s)).pipeTo(sender)
             }
             case Some(s@UploadFile(_, _, _, _)) => {
               if (s.maybeUploadError.nonEmpty) {
@@ -79,8 +80,8 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
                 Future.successful(s)
               } else {
                 println(s"State before applying transition...... ${s}")
-                applyTransition(s, ss, waitForFileVerification).map { s =>
-                  Future.successful(self ! CheckState(id, s))
+                applyTransition(s, ss, waitForFileVerification).flatMap { s =>
+                  (self ? CheckState(id, s)).pipeTo(sender)
                 }
               }
             }
