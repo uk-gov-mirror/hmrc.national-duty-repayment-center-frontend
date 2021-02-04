@@ -254,7 +254,6 @@ GET         /file-verification/:reference/status          controllers.FileUpload
 POST        /ndrc/:id/callback-from-upscan                controllers.FileUploadController.callbackFromUpscan(id: String)
 GET         /file-verification                           controllers.FileUploadController.showWaitingForFileVerification
 GET         /file-verification/:id/async                        controllers.FileUploadController.asyncWaitingForFileVerification(id: String)
-GET         /file-verification/view                            controllers.FileUploadController.viewWaitingForFileVerification
 GET         /file-rejected/:id                            controllers.FileUploadController.asyncMarkFileUploadAsRejected(id: String)
 GET         /file-rejected                                controllers.FileUploadController.markFileUploadAsRejected()
 GET         /file-uploaded/:reference/remove              controllers.FileUploadController.removeFileUploadByReference(reference: String)

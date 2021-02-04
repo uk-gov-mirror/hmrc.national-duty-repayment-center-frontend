@@ -57,11 +57,11 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
 
   override def receive: Receive = {
     case CheckState(id, exitTime, state) => {
-      println(exitTime)
+      println(s"The time to break is $exitTime")
       println(LocalDateTime.now())
       if (LocalDateTime.now().isAfter(exitTime)) {
         println("exiting everything......................")
-        Future.successful(state)
+       Future.successful(state).pipeTo(sender)
       } else {
         println("Replying to sender..................")
         val f = sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
@@ -136,7 +136,7 @@ class FileUploadController @Inject()(
   // GET /file-verification
   final val showWaitingForFileVerification = (identify andThen getData andThen requireData).async { implicit request =>
     val startTime = LocalDateTime.now
-    val exitTime = startTime.plusMinutes(30)
+    val exitTime = startTime.plusSeconds(5)
 
     sessionState(request.internalId).flatMap { ss =>
       ss.state match {
@@ -157,23 +157,20 @@ class FileUploadController @Inject()(
               }
               case s: WaitingForFileVerification => {
                 println("waiting...")
-
-                Redirect(routes.FileUploadController.viewWaitingForFileVerification())
+                Ok(
+                  waitingForFileVerificationView(
+                    successAction = controller.showFileUploaded,
+                    failureAction = controller.showFileUpload,
+                    checkStatusAction = controller.checkFileVerificationStatus(request.internalId),
+                    backLink = controller.showFileUpload
+                  )
+                )
               }
-              case _ => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
+              case _ => InternalServerError("Missing file upload state")
             }
-
           }
-        case _ => ???
+        case _ => Future.successful(InternalServerError("Missing file upload state"))
       }
-    }
-  }
-
-  // GET /file-verification
-  final def viewWaitingForFileVerification = (identify andThen getData andThen requireData) { implicit request =>
-    request.userAnswers.fileUploadState match {
-      case Some(s: WaitingForFileVerification) => renderState(s)
-      case _ => InternalServerError("Invalid request state")
     }
   }
 
