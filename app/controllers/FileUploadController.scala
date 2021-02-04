@@ -53,31 +53,20 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
 
   override def receive: Receive = {
     case CheckState(id, currentState) => {
-      println(s"current state is $currentState ")
+
+      println("Replying to sender..................")
       currentState match {
         case s@FileUploaded(_, _) => println("I am done !")
-          self ! Terminate(s)
+          Future.successful(sender ! s)
         case _ => {
           log.info("Keep checking status.......................")
           sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
-            case Some(s@FileUploaded(_, _)) => {
-              println(s"state reached............................................$s")
-              Future.successful(self ! Terminate(s))
-            }
-            case Some(s@WaitingForFileVerification(_, _, _, _)) => {
-              println(s"continue waiting..........................................$s")
-              Future.successful(self ! CheckState(id, s))
-            }
             case Some(s@UploadFile(_, _, _, _)) => {
-              if(s.maybeUploadError.nonEmpty) {
+              if (s.maybeUploadError.nonEmpty) {
                 println("There are errors on the file .......")
-                self ! Terminate(s)
-                Future.successful(self ! currentState)
-
-              }else {
-                println(s"State before applying transition...... ${s}")
+                Future.successful(sender ! s)
+              } else {
                 println(s"turn to wait for verification and continue waiting..........$s")
-
                 applyTransition(s, ss, waitForFileVerification).map { s =>
                   self ! CheckState(id, s)
                 }
@@ -87,9 +76,6 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
         }
       }
     }
-    case Terminate(finalFileUploadState) =>
-      println("terminating now....")
-      sender() ! finalFileUploadState
   }
 
 
@@ -146,14 +132,25 @@ class FileUploadController @Inject()(
           Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
         case Some(s) => // start sending check status message till upscan callback arrives or timeout happens.
           implicit val timeout = Timeout(10 seconds);
-          (checkStateActor ? CheckState(request.internalId, s)).mapTo[FileUploadState].map { _ match {
-            case s: FileUploaded => Redirect(routes.FileUploadController.showFileUploaded())
-            case s: UploadFile => Redirect(routes.FileUploadController.showFileUpload())
-            case s: WaitingForFileVerification => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
-            case _ => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
-          }
+          (checkStateActor ? CheckState(request.internalId, s)).mapTo[Future[FileUploadState]].flatMap(_.map {
+            _ match {
+              case s: FileUploaded => {
+                println("uploaded")
+                Redirect(routes.FileUploadController.showFileUploaded())
+              }
+              case s: UploadFile => {
+                println("upload")
 
-          }
+                Redirect(routes.FileUploadController.showFileUpload())
+              }
+              case s: WaitingForFileVerification => {
+                println("waiting...")
+
+                Redirect(routes.FileUploadController.viewWaitingForFileVerification())
+              }
+              case _ => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
+            }
+          })
         case _ => ???
       }
     }
