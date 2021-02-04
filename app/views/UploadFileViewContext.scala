@@ -34,8 +34,8 @@ class UploadFileViewContext @Inject()(appConfig: FrontendAppConfig) {
       case FileVerificationFailed(details) =>
         FormError("file", Seq(toMessageKey(details)))
 
-      /*case DuplicateFileUpload(checksum, existingFileName, duplicateFileName) =>
-        FormError("file", Seq("error.file-upload.duplicate"))*/
+      case DuplicateFileUpload(checksum, existingFileName, duplicateFileName) =>
+        FormError("file", Seq("error.file-upload.duplicate"))
     }
 
   def toMessageKey(error: S3UploadError): String =

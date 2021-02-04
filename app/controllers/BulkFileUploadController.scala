@@ -19,19 +19,16 @@ package controllers
 import config.FrontendAppConfig
 import connectors.{UpscanInitiateConnector, UpscanInitiateRequest}
 import controllers.actions._
-import forms.AdditionalFileUploadFormProvider
 import javax.inject.Inject
-import models.{ArticleType, ClaimantType, CustomsRegulationType, FileVerificationStatus, Mode, NormalMode, S3UploadError, UpscanNotification, UserAnswers}
+import models.{CustomsRegulationType, NormalMode, S3UploadError, UserAnswers}
 import navigation.Navigator
-import pages.{ArticleTypePage, BulkFileUploadPage, ClaimantTypePage, CustomsRegulationTypePage}
+import pages.CustomsRegulationTypePage
 import play.api.data.Form
 import play.api.data.Forms.{mapping, nonEmptyText, optional, text}
 import play.api.i18n.{I18nSupport, MessagesApi}
-import play.api.libs.json.Json
 import play.api.mvc.{Action, AnyContent, Call, MessagesControllerComponents, Request, RequestHeader, Result}
-import play.mvc.Http.HeaderNames
 import repositories.SessionRepository
-import services.{FileUploadService, FileUploadState, FileUploaded, UploadFile, WaitingForFileVerification}
+import services.{FileUploadService, FileUploadState, UploadFile, WaitingForFileVerification}
 import uk.gov.hmrc.play.bootstrap.controller.FrontendBaseController
 import views.html.{BulkFileUploadView, WaitingForFileVerificationView}
 
@@ -59,10 +56,9 @@ class BulkFileUploadController @Inject()(
 
   //GET /file-upload
   val showFileUpload: Action[AnyContent] = (identify andThen getData andThen requireData).async { implicit request =>
-    println("hey........................................")
     val state = request.userAnswers.fileUploadState
     for {
-      fileUploadState <- initiateFileUpload(upscanRequest(request.internalId))(upscanInitiateConnector.initiate(_))(state)
+      fileUploadState <- initiateFileUpload(upscanRequest(request.internalId, request.userAnswers))(upscanInitiateConnector.initiate(_))(state)
       res <- updateSession(fileUploadState, Some(request.userAnswers))
       if (res)
     } yield renderState(request.userAnswers,fileUploadState)
@@ -74,9 +70,9 @@ class BulkFileUploadController @Inject()(
     else Future.successful(true)
   }
 
-  final def successRedirect(id: String)(implicit rh: RequestHeader) = appConfig.baseExternalCallbackUrl + (rh.cookies.get(COOKIE_JSENABLED) match {
-    case Some(_) => controller.asyncWaitingForFileVerification(id)
-    case None => controller.showWaitingForFileVerification
+  final def successRedirect(id: String, userAnswers: UserAnswers)(implicit rh: RequestHeader) = appConfig.baseExternalCallbackUrl + (rh.cookies.get(COOKIE_JSENABLED) match {
+    case Some(_) => getBulkEntryDetails(userAnswers)
+    case None => getBulkEntryDetails(userAnswers)
   })
 
   final def errorRedirect(id: String)(implicit rh: RequestHeader) =
@@ -85,10 +81,10 @@ class BulkFileUploadController @Inject()(
       case None => controller.markFileUploadAsRejected
     })
 
-  final def upscanRequest(id: String)(implicit rh: RequestHeader): UpscanInitiateRequest = {
+  final def upscanRequest(id: String, userAnswers: UserAnswers)(implicit rh: RequestHeader): UpscanInitiateRequest = {
     UpscanInitiateRequest(
       callbackUrl = appConfig.baseInternalCallbackUrl + controller.callbackFromUpscan(id).url,
-      successRedirect = Some(successRedirect(id)),
+      successRedirect = Some(successRedirect(id, userAnswers)),
       errorRedirect = Some(errorRedirect(id)),
       minimumFileSize = Some(1),
       maximumFileSize = Some(appConfig.fileFormats.maxFileSizeMb * 1024 * 1024),
@@ -145,26 +141,11 @@ class BulkFileUploadController @Inject()(
       "errorResource" -> optional(text)
     )(S3UploadError.apply)(S3UploadError.unapply)
   )
-
-  def onSubmit(mode: Mode): Action[AnyContent] = (identify andThen getData andThen requireData).async {
-    implicit request =>
-      println("bey........................................")
-        val value = request.userAnswers.get(CustomsRegulationTypePage).get
-
-          for {
-            updatedAnswers <- Future.fromTry(request.userAnswers.set(CustomsRegulationTypePage, value))
-            updatedAnswersWithArticleType <- {
-              updatedAnswers.get(CustomsRegulationTypePage) match {
-                case Some(CustomsRegulationType.UKCustomsCodeRegulation) => Future.fromTry(updatedAnswers.set(ArticleTypePage, ArticleType.Schedule))
-                case _ => Future.fromTry(request.userAnswers.set(CustomsRegulationTypePage, value))
-              }
-            }
-            _              <- sessionRepository.set(updatedAnswersWithArticleType)
-          } yield Redirect(navigator.nextPage(BulkFileUploadPage, mode, updatedAnswersWithArticleType))
-  }
-
   private def getBulkEntryDetails(answers: UserAnswers): Call = answers.get(CustomsRegulationTypePage) match {
     case Some(CustomsRegulationType.UnionsCustomsCodeRegulation)  => routes.ArticleTypeController.onPageLoad(NormalMode)
-    case _ => routes.EntryDetailsController.onPageLoad(NormalMode)
+    case _ => {
+      val value = answers.get(CustomsRegulationTypePage)
+println("value.........................."+value)
+      routes.EntryDetailsController.onPageLoad(NormalMode)}
   }
 }
