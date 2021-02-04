@@ -1,5 +1,5 @@
-import {Component} from './components/component';
-import {FileUpload} from './components/file-upload';
+import {Component} from '../components/component';
+import {FileUpload} from '../components/file-upload';
 
 export default function loadComponents(): void {
   loadComponent(FileUpload, '.file-upload');
