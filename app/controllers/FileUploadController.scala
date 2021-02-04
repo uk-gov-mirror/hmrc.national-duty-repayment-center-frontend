@@ -42,7 +42,7 @@ import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 
 
-case class CheckState(id: String, currentState: FileUploadState)
+case class CheckState(id: String, exitTime: LocalDateTime,state: FileUploadState)
 
 case class Terminate(state: FileUploadState)
 
@@ -53,42 +53,36 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
   type ConvertState = (FileUploadState) => Future[FileUploadState]
 
   import akka.pattern.pipe
+  implicit val timeout = Timeout(10 seconds);
 
   override def receive: Receive = {
-    case CheckState(id, currentState) => {
+    case CheckState(id, exitTime, state) => {
+      if(exitTime.isAfter(LocalDateTime.now()))
+        Future.successful(state)
+      else
       println("Replying to sender..................")
-      implicit val timeout = Timeout(10 seconds);
-
-      currentState match {
-        case s@FileUploaded(_, _) =>
-          println("I am done !")
+      val f = sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
+        case Some(s@FileUploaded(_, _)) => {
+          println(s"state reached............................................$s")
           Future.successful(s)
-        case _ => {
-          log.info("Keep checking status.......................")
-          val f = sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
-            case Some(s@FileUploaded(_, _)) => {
-              println(s"state reached............................................$s")
-              Future.successful(s)
-            }
-            case Some(s@WaitingForFileVerification(_, _, _, _)) => {
-              println(s"continue waiting..........................................$s")
-              (self ? CheckState(id, s)).pipeTo(sender)
-            }
-            case Some(s@UploadFile(_, _, _, _)) => {
-              if (s.maybeUploadError.nonEmpty) {
-                println("There are errors on the file .......")
-                Future.successful(s)
-              } else {
-                println(s"State before applying transition...... ${s}")
-                applyTransition(s, ss, waitForFileVerification).flatMap { s =>
-                  (self ? CheckState(id, s)).pipeTo(sender)
-                }
-              }
-            }
-          })
-          f.pipeTo(sender)
         }
-      }
+        case Some(s@WaitingForFileVerification(_, _, _, _)) => {
+          println(s"continue waiting..........................................$s")
+          (self ? CheckState(id, exitTime, s)).pipeTo(sender)
+        }
+        case Some(s@UploadFile(_, _, _, _)) => {
+          if (s.maybeUploadError.nonEmpty) {
+            println("There are errors on the file .......")
+            Future.successful(s)
+          } else {
+            println(s"State before applying transition...... ${s}")
+            applyTransition(s, ss, waitForFileVerification).flatMap { s =>
+              (self ? CheckState(id, exitTime, s)).pipeTo(sender)
+            }
+          }
+        }
+      })
+      f.pipeTo(sender)
     }
   }
 
@@ -142,11 +136,11 @@ class FileUploadController @Inject()(
 
     sessionState(request.internalId).flatMap { ss =>
       ss.state match {
-        case Some(s: FileUploaded) => // if callback has happened then just go to file downloaded
-          Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
+//        case Some(s: FileUploaded) => // if callback has happened then just go to file downloaded
+//          Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
         case Some(s) => // start sending check status message till upscan callback arrives or timeout happens.
           implicit val timeout = Timeout(10 seconds);
-          (checkStateActor ? CheckState(request.internalId, s)).mapTo[FileUploadState].map {
+          (checkStateActor ? CheckState(request.internalId, exitTime, s)).mapTo[FileUploadState].map {
             _ match {
               case s: FileUploaded => {
                 println("uploaded")
