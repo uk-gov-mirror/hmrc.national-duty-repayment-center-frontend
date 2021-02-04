@@ -43,6 +43,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 
 case class CheckState(id: String, currentState: FileUploadState)
+
 case class Terminate(state: FileUploadState)
 
 //.orApplyOnTimeout(_ => FileUploadTransitions.waitForFileVerification)
@@ -51,28 +52,40 @@ case class Terminate(state: FileUploadState)
 class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit ec: ExecutionContext) extends Actor with FileUploadService with ActorLogging {
   type ConvertState = (FileUploadState) => Future[FileUploadState]
 
+  import akka.pattern.pipe
+
   override def receive: Receive = {
     case CheckState(id, currentState) => {
-
       println("Replying to sender..................")
+
       currentState match {
-        case s@FileUploaded(_, _) => println("I am done !")
-          Future.successful(sender ! s)
+        case s@FileUploaded(_, _) =>
+          println("I am done !")
+         sender ! s
         case _ => {
           log.info("Keep checking status.......................")
-          sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
+          val f = sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
+            case Some(s@FileUploaded(_, _)) => {
+              println(s"state reached............................................$s")
+              Future.successful(s)
+            }
+            case Some(s@WaitingForFileVerification(_, _, _, _)) => {
+              println(s"continue waiting..........................................$s")
+              Future.successful(self ! CheckState(id, s))
+            }
             case Some(s@UploadFile(_, _, _, _)) => {
               if (s.maybeUploadError.nonEmpty) {
                 println("There are errors on the file .......")
-                Future.successful(sender ! s)
+                Future.successful(s)
               } else {
-                println(s"turn to wait for verification and continue waiting..........$s")
+                println(s"State before applying transition...... ${s}")
                 applyTransition(s, ss, waitForFileVerification).map { s =>
-                  self ! CheckState(id, s)
+                  Future.successful(self ! CheckState(id, s))
                 }
               }
             }
           })
+          f.pipeTo(sender)
         }
       }
     }
@@ -88,7 +101,7 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
   def applyTransition(state: FileUploadState, userAnswers: Option[UserAnswers], cs: ConvertState) = {
     for {
       newState <- cs(state)
-      res <- updateSession(newState, userAnswers)
+      res <- synchronized(updateSession(newState, userAnswers))
       if (res)
     } yield newState
   }
@@ -132,7 +145,7 @@ class FileUploadController @Inject()(
           Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
         case Some(s) => // start sending check status message till upscan callback arrives or timeout happens.
           implicit val timeout = Timeout(10 seconds);
-          (checkStateActor ? CheckState(request.internalId, s)).mapTo[Future[FileUploadState]].flatMap(_.map {
+          (checkStateActor ? CheckState(request.internalId, s)).mapTo[FileUploadState].map {
             _ match {
               case s: FileUploaded => {
                 println("uploaded")
@@ -150,7 +163,8 @@ class FileUploadController @Inject()(
               }
               case _ => Redirect(routes.FileUploadController.viewWaitingForFileVerification())
             }
-          })
+
+          }
         case _ => ???
       }
     }
