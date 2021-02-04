@@ -57,32 +57,36 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
 
   override def receive: Receive = {
     case CheckState(id, exitTime, state) => {
-      if(exitTime.isAfter(LocalDateTime.now()))
+      println(exitTime)
+      println(LocalDateTime.now())
+      if (LocalDateTime.now().isAfter(exitTime)) {
+        println("exiting everything......................")
         Future.successful(state)
-      else
-      println("Replying to sender..................")
-      val f = sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
-        case Some(s@FileUploaded(_, _)) => {
-          println(s"state reached............................................$s")
-          Future.successful(s)
-        }
-        case Some(s@WaitingForFileVerification(_, _, _, _)) => {
-          println(s"continue waiting..........................................$s")
-          (self ? CheckState(id, exitTime, s)).pipeTo(sender)
-        }
-        case Some(s@UploadFile(_, _, _, _)) => {
-          if (s.maybeUploadError.nonEmpty) {
-            println("There are errors on the file .......")
+      } else {
+        println("Replying to sender..................")
+        val f = sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
+          case Some(s@FileUploaded(_, _)) => {
+            println(s"state reached............................................$s")
             Future.successful(s)
-          } else {
-            println(s"State before applying transition...... ${s}")
-            applyTransition(s, ss, waitForFileVerification).flatMap { s =>
-              (self ? CheckState(id, exitTime, s)).pipeTo(sender)
+          }
+          case Some(s@WaitingForFileVerification(_, _, _, _)) => {
+            println(s"continue waiting..........................................$s")
+            (self ? CheckState(id, exitTime, s)).pipeTo(sender)
+          }
+          case Some(s@UploadFile(_, _, _, _)) => {
+            if (s.maybeUploadError.nonEmpty) {
+              println("There are errors on the file .......")
+              Future.successful(s)
+            } else {
+              println(s"State before applying transition...... ${s}")
+              applyTransition(s, ss, waitForFileVerification).flatMap { s =>
+                (self ? CheckState(id, exitTime, s)).pipeTo(sender)
+              }
             }
           }
-        }
-      })
-      f.pipeTo(sender)
+        })
+        f.pipeTo(sender)
+      }
     }
   }
 
@@ -132,7 +136,7 @@ class FileUploadController @Inject()(
   // GET /file-verification
   final val showWaitingForFileVerification = (identify andThen getData andThen requireData).async { implicit request =>
     val startTime = LocalDateTime.now
-    val exitTime = startTime.plusSeconds(2)
+    val exitTime = startTime.plusMinutes(30)
 
     sessionState(request.internalId).flatMap { ss =>
       ss.state match {
