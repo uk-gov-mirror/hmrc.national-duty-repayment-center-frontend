@@ -59,12 +59,13 @@ class BulkFileUploadController @Inject()(
 
   //GET /file-upload
   val showFileUpload: Action[AnyContent] = (identify andThen getData andThen requireData).async { implicit request =>
+    println("hey........................................")
     val state = request.userAnswers.fileUploadState
     for {
       fileUploadState <- initiateFileUpload(upscanRequest(request.internalId))(upscanInitiateConnector.initiate(_))(state)
       res <- updateSession(fileUploadState, Some(request.userAnswers))
       if (res)
-    } yield renderState(fileUploadState)
+    } yield renderState(request.userAnswers,fileUploadState)
   }
 
   private def updateSession(newState: FileUploadState, userAnswers: Option[UserAnswers]) = {
@@ -101,7 +102,7 @@ class BulkFileUploadController @Inject()(
     } yield (SessionState(u.flatMap(_.fileUploadState), u))
   }
 
-  final def renderState(fileUploadState: FileUploadState, formWithErrors: Option[Form[_]] = None)(implicit request: Request[_]): Result = {
+  final def renderState(userAnswers: UserAnswers, fileUploadState: FileUploadState, formWithErrors: Option[Form[_]] = None)(implicit request: Request[_]): Result = {
     fileUploadState match {
       case UploadFile(reference, uploadRequest, fileUploads, maybeUploadError) =>
         Ok(
@@ -109,7 +110,7 @@ class BulkFileUploadController @Inject()(
             uploadRequest,
             fileUploads,
             maybeUploadError,
-            successAction = controller.showFileUploaded,
+            successAction = getBulkEntryDetails(userAnswers),
             failureAction = controller.showFileUpload,
             checkStatusAction = controller.checkFileVerificationStatus(reference),
             backLink = routes.CustomsRegulationTypeController.onPageLoad(NormalMode)) //TODO: for more than one entry the back link should be diff. Make this method conditional when we get there
@@ -118,7 +119,7 @@ class BulkFileUploadController @Inject()(
       case WaitingForFileVerification(reference, _, _, _) =>
         Ok(
           waitingForFileVerificationView(
-            successAction = controller.showFileUploaded,
+            successAction = getBulkEntryDetails(userAnswers),
             failureAction = controller.showFileUpload,
             checkStatusAction = controller.checkFileVerificationStatus(reference),
             backLink = controller.showFileUpload
@@ -147,6 +148,7 @@ class BulkFileUploadController @Inject()(
 
   def onSubmit(mode: Mode): Action[AnyContent] = (identify andThen getData andThen requireData).async {
     implicit request =>
+      println("bey........................................")
         val value = request.userAnswers.get(CustomsRegulationTypePage).get
 
           for {
@@ -159,5 +161,10 @@ class BulkFileUploadController @Inject()(
             }
             _              <- sessionRepository.set(updatedAnswersWithArticleType)
           } yield Redirect(navigator.nextPage(BulkFileUploadPage, mode, updatedAnswersWithArticleType))
+  }
+
+  private def getBulkEntryDetails(answers: UserAnswers): Call = answers.get(CustomsRegulationTypePage) match {
+    case Some(CustomsRegulationType.UnionsCustomsCodeRegulation)  => routes.ArticleTypeController.onPageLoad(NormalMode)
+    case _ => routes.EntryDetailsController.onPageLoad(NormalMode)
   }
 }

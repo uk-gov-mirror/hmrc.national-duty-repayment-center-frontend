@@ -63,6 +63,7 @@ class FileUploadController @Inject()(
 
   // GET /file-verification
   final def showWaitingForFileVerification = {
+    Thread.sleep(INITIAL_CALLBACK_WAIT_TIME_MILLIS)
     (identify andThen getData andThen requireData).async { implicit request =>
       val answers = request.userAnswers
       answers.fileUploadState match {
