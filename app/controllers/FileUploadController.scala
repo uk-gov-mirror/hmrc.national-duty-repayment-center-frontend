@@ -90,6 +90,7 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
     }
   }
 
+
   private def updateSession(newState: FileUploadState, userAnswers: Option[UserAnswers]) = {
     if (userAnswers.nonEmpty)
       sessionRepository.set(userAnswers = userAnswers.get.copy(fileUploadState = Some(newState)))
@@ -99,7 +100,7 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
   def applyTransition(state: FileUploadState, userAnswers: Option[UserAnswers], cs: ConvertState) = {
     for {
       newState <- cs(state)
-      res <- updateSession(newState, userAnswers)
+      res <- synchronized(updateSession(newState, userAnswers))
       if (res)
     } yield newState
   }
@@ -299,7 +300,7 @@ class FileUploadController @Inject()(
       newState <- cs(state)
       res <- {
         println(s"updating status from state ${newState}")
-        updateSession(newState, userAnswers)
+        synchronized(updateSession(newState, userAnswers))
       }
       if (res)
     } yield newState
