@@ -226,13 +226,14 @@ class FileUploadControllerSpec extends SpecBase with MockitoSugar {
       )
       val application = appBuilder(userAnswers = Some(userAnswers.copy(fileUploadState = Some(fileUploadedState)))).build()
 
-      running(application) {
-        val request = FakeRequest(POST, uploadAnotherFile)
-          .withFormUrlEncodedBody(("uploadAnotherFile", "yes"))
-        val result = route(application, request).value
-        status(result) mustEqual 200
-        contentAsString(result) must include(htmlEscapedMessage("view.upload-file.heading"))
-      }
+
+      val request = FakeRequest(POST, uploadAnotherFile)
+        .withFormUrlEncodedBody(("uploadAnotherFile", "yes"))
+
+      val result = route(application, request).value
+
+      redirectLocation(result) mustEqual Some(routes.FileUploadController.showFileUpload().url)
+
       application.stop()
     }
 

@@ -38,7 +38,7 @@
 
         @html.h2(messages(if(fileUploads.isEmpty) "view.upload-file.heading" else "view.upload-file.next.heading"), classes = "govuk-heading-l")
 
-        <form action="@uploadRequest.href" method="POST" enctype="multipart/form-data" class="js-form file-upload" novalidate
+        <form action="@uploadRequest.href" method="POST" enctype="multipart/form-data" class="js-form file-uploadzzz" novalidate
         data-file-upload-redirect-success-url="@successAction.url"
         data-file-upload-redirect-failure-url="@failureAction.url"
         data-file-upload-check-status-url="@checkStatusAction.url"

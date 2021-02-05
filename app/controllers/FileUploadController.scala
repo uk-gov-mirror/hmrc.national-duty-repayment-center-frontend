@@ -16,7 +16,7 @@
 
 package controllers
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.util.Timeout
 import config.FrontendAppConfig
@@ -40,24 +40,6 @@ import java.time.LocalDateTime
 import javax.inject.{Inject, Named}
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
-import akka.pattern.pipe
-
-
-case class CheckState(id: String, exitTime: LocalDateTime,state: FileUploadState)
-
-class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit ec: ExecutionContext) extends Actor with FileUploadService with ActorLogging {
-  implicit val timeout = Timeout(2 seconds);
-  override def receive: Receive = {
-    case CheckState(id, exitTime, state) => {
-      if (LocalDateTime.now().isAfter(exitTime)) Future.successful(state).pipeTo(sender)
-      else
-        sessionRepository.get(id).flatMap(ss => ss.flatMap(_.fileUploadState) match {
-          case Some(s@FileUploaded(_, _)) => Future.successful(s)
-          case Some(s@_) => (self ? CheckState(id, exitTime, s)).pipeTo(sender)
-        }).pipeTo(sender)
-    }
-  }
-}
 
 class FileUploadController @Inject()(
                                       override val messagesApi: MessagesApi,
@@ -78,22 +60,11 @@ class FileUploadController @Inject()(
 
   final val COOKIE_JSENABLED = "jsenabled"
   final val controller = routes.FileUploadController
-
   val uploadAnotherFileChoiceForm = additionalFileUploadFormProvider.UploadAnotherFileChoiceForm
   type ConvertState = (FileUploadState) => Future[FileUploadState]
-  val system = ActorSystem("system")
-
-
-  def waitingView(id: String)(implicit request: Request[_]) = Ok(
-    waitingForFileVerificationView(
-      successAction = controller.showFileUploaded,
-      failureAction = controller.showFileUpload,
-      checkStatusAction = controller.checkFileVerificationStatus(id),
-      backLink = controller.showFileUpload
-    )
-  )
-
   case class SessionState(state: Option[FileUploadState], userAnswers: Option[UserAnswers])
+  val fileStateError = InternalServerError("Missing file upload state")
+
 
   // GET /file-verification
   final val showWaitingForFileVerification = (identify andThen getData andThen requireData).async { implicit request =>
@@ -108,9 +79,9 @@ class FileUploadController @Inject()(
                 else
                   applyTransition(s, ss.userAnswers, waitForFileVerification).map(_ => waitingView(request.internalId)(request))
               case s: WaitingForFileVerification => Future.successful(waitingView(request.internalId)(request))
-              case _ => Future.successful(InternalServerError("Missing file upload state"))
+              case _ => Future.successful(fileStateError)
             }
-        case _ => Future.successful(InternalServerError("Missing file upload state"))
+        case _ => Future.successful(fileStateError)
       }
     }
   }
@@ -125,8 +96,9 @@ class FileUploadController @Inject()(
             case s@UploadFile(_, _, _, _) => applyTransition(s, ss.userAnswers, waitForFileVerification).map(newState => acknowledgeFileUploadRedirect(newState))
             case s@WaitingForFileVerification(_, _, _, _) => Future.successful(acknowledgeFileUploadRedirect(s))
             case s@FileUploaded(_, _) => Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
-            case _ => Future.successful(InternalServerError("Missing file upload state"))
+            case _ => Future.successful(fileStateError)
           }
+        case _ => Future.successful(fileStateError)
       }
     }
   }
@@ -138,7 +110,7 @@ class FileUploadController @Inject()(
       s3Error =>
         request.userAnswers.fileUploadState match {
           case Some(s) => applyTransition(s, Some(request.userAnswers), fileUploadWasRejected(s3Error)(_)).map(newState => renderState(newState, Some(UpscanUploadErrorForm.fill(s3Error))))
-          case None => Future.successful(InternalServerError("Missing file upload state"))
+          case None => Future.successful(fileStateError)
         }
     )
   }
@@ -151,7 +123,7 @@ class FileUploadController @Inject()(
         sessionState(id).flatMap { ss =>
           ss.state match {
             case Some(s) => applyTransition(s, ss.userAnswers, fileUploadWasRejected(s3Error)(_)).map(newState => acknowledgeFileUploadRedirect(newState))
-            case None => Future.successful(InternalServerError("Missing file upload state"))
+            case None => Future.successful(fileStateError)
           }
         }
     )
@@ -159,12 +131,10 @@ class FileUploadController @Inject()(
 
   // POST /ndrc/:id/callback-from-upscan
   final def callbackFromUpscan(id: String) = Action.async(parse.json.map(_.as[UpscanNotification])) { implicit request =>
-    println("callback from upscan arrived ................................................................")
-
     sessionState(id).flatMap { ss =>
       ss.state match {
         case Some(s) => applyTransition(s, ss.userAnswers, upscanCallbackArrived(request.body)(_)).map(newState => acknowledgeFileUploadRedirect(newState))
-        case None => Future.successful(InternalServerError("Missing file upload state"))
+        case None => Future.successful(fileStateError)
       }
     }
   }
@@ -179,7 +149,7 @@ class FileUploadController @Inject()(
       ss.state match {
         case Some(s) => applyTransition(s, ss.userAnswers,
           removeFileUploadBy(reference)(upscanRequest(request.internalId))(upscanInitiateConnector.initiate(_))(_)).map(newState => renderState(newState))
-        case None => Future.successful(InternalServerError("Missing file upload state"))
+        case None => Future.successful(fileStateError)
       }
     }
   }
@@ -190,11 +160,8 @@ class FileUploadController @Inject()(
     for {
       fileUploadState <- initiateFileUpload(upscanRequest(request.internalId))(upscanInitiateConnector.initiate(_))(state)
       res <- updateSession(fileUploadState, Some(request.userAnswers))
-      if (res)
-    } yield {
-
-      renderState(fileUploadState)
-    }
+      if res
+    } yield renderState(fileUploadState)
   }
 
   //GET /file-uploaded
@@ -223,14 +190,15 @@ class FileUploadController @Inject()(
                 applyTransition(s, ss.userAnswers, submitedUploadAnotherFileChoice(upscanRequest(request.internalId))(upscanInitiateConnector.initiate(_))(_))
                   .map(_ => Redirect(routes.FileUploadController.showFileUpload()))
               else Future.successful(Redirect(additionalFileUploadRoute(request.userAnswers)))
-            case None => Future.successful(InternalServerError("Missing file upload state"))
+            case None => Future.successful(fileStateError)
           }
         }
     )
   }
 
   final def successRedirect(id: String)(implicit rh: RequestHeader) = appConfig.baseExternalCallbackUrl + (rh.cookies.get(COOKIE_JSENABLED) match {
-    case Some(_) => controller.asyncWaitingForFileVerification(id)
+    case Some(_) => controller.showWaitingForFileVerification
+      //TODO: THE ABOVE SHOULD BE CHANGED TO THIS: controller.asyncWaitingForFileVerification(id) once javascript works
     case None => controller.showWaitingForFileVerification
   })
 
@@ -241,15 +209,10 @@ class FileUploadController @Inject()(
     })
 
   def applyTransition(state: FileUploadState, userAnswers: Option[UserAnswers], cs: ConvertState) = {
-    println(s"updating status from state ${state}")
-
     for {
       newState <- cs(state)
-      res <- {
-        println(s"updating status from state ${newState}")
-        synchronized(updateSession(newState, userAnswers))
-      }
-      if (res)
+      res <- updateSession(newState, userAnswers)
+      if res
     } yield newState
   }
 
@@ -307,6 +270,15 @@ class FileUploadController @Inject()(
     } yield (SessionState(u.flatMap(_.fileUploadState), u))
   }
 
+  def waitingView(id: String)(implicit request: Request[_]) = Ok(
+    waitingForFileVerificationView(
+      successAction = controller.showFileUploaded,
+      failureAction = controller.showFileUpload,
+      checkStatusAction = controller.checkFileVerificationStatus(id),
+      backLink = controller.showFileUpload
+    )
+  )
+
   final def renderState(fileUploadState: FileUploadState, formWithErrors: Option[Form[_]] = None)(implicit request: Request[_]): Result = {
     fileUploadState match {
       case UploadFile(reference, uploadRequest, fileUploads, maybeUploadError) =>
@@ -321,15 +293,7 @@ class FileUploadController @Inject()(
             backLink = routes.EvidenceSupportingDocsController.onPageLoad()) //TODO: for more than one entry the back link should be diff. Make this method conditional when we get there
         )
 
-      case WaitingForFileVerification(reference, _, _, _) =>
-        Ok(
-          waitingForFileVerificationView(
-            successAction = controller.showFileUploaded,
-            failureAction = controller.showFileUpload,
-            checkStatusAction = controller.checkFileVerificationStatus(reference),
-            backLink = controller.showFileUpload
-          )
-        )
+      case WaitingForFileVerification(reference, _, _, _) => waitingView(reference)
       case FileUploaded(fileUploads, _) =>
         Ok(fileUploadedView(
           or(formWithErrors, uploadAnotherFileChoiceForm, None),
