@@ -74,15 +74,8 @@ class CheckStateActor @Inject()(sessionRepository: SessionRepository)(implicit e
             (self ? CheckState(id, exitTime, s)).pipeTo(sender)
           }
           case Some(s@UploadFile(_, _, _, _)) => {
-            if (s.maybeUploadError.nonEmpty) {
-              println("There are errors on the file .......")
-              Future.successful(s)
-            } else {
-              println(s"State before applying transition...... ${s}")
-              applyTransition(s, ss, waitForFileVerification).flatMap { s =>
-                (self ? CheckState(id, exitTime, s)).pipeTo(sender)
-              }
-            }
+            println(s"continue checking in upload file mode..........................................$s")
+            (self ? CheckState(id, exitTime, s)).pipeTo(sender)
           }
         })
         f.pipeTo(sender)
@@ -131,42 +124,50 @@ class FileUploadController @Inject()(
   type ConvertState = (FileUploadState) => Future[FileUploadState]
   val system = ActorSystem("system")
 
+
+  def waitingView(id: String)(implicit request: Request[_]) = Ok(
+    waitingForFileVerificationView(
+      successAction = controller.showFileUploaded,
+      failureAction = controller.showFileUpload,
+      checkStatusAction = controller.checkFileVerificationStatus(id),
+      backLink = controller.showFileUpload
+    )
+  )
+
   case class SessionState(state: Option[FileUploadState], userAnswers: Option[UserAnswers])
 
   // GET /file-verification
   final val showWaitingForFileVerification = (identify andThen getData andThen requireData).async { implicit request =>
     val startTime = LocalDateTime.now
-    val exitTime = startTime.plusSeconds(5)
+    val exitTime = startTime.plusSeconds(3)
 
     sessionState(request.internalId).flatMap { ss =>
       ss.state match {
-//        case Some(s: FileUploaded) => // if callback has happened then just go to file downloaded
-//          Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
         case Some(s) => // start sending check status message till upscan callback arrives or timeout happens.
-          implicit val timeout = Timeout(10 seconds);
-          (checkStateActor ? CheckState(request.internalId, exitTime, s)).mapTo[FileUploadState].map {
+          implicit val timeout = Timeout(3 seconds)
+          (checkStateActor ? CheckState(request.internalId, exitTime, s)).mapTo[FileUploadState].flatMap {
             _ match {
               case s: FileUploaded => {
                 println("uploaded")
-                Redirect(routes.FileUploadController.showFileUploaded())
+                Future.successful(Redirect(routes.FileUploadController.showFileUploaded()))
               }
               case s: UploadFile => {
                 println("upload")
-
-                Redirect(routes.FileUploadController.showFileUpload())
+                if (s.maybeUploadError.nonEmpty) {
+                  println("There are errors on the file .......")
+                  Future.successful(Redirect(routes.FileUploadController.showFileUpload()))
+                } else {
+                  println(s"State before applying transition...... ${s}")
+                  applyTransition(s, ss.userAnswers, waitForFileVerification).map { s =>
+                    waitingView(request.internalId)(request)
+                  }
+                }
               }
               case s: WaitingForFileVerification => {
-                println("waiting...")
-                Ok(
-                  waitingForFileVerificationView(
-                    successAction = controller.showFileUploaded,
-                    failureAction = controller.showFileUpload,
-                    checkStatusAction = controller.checkFileVerificationStatus(request.internalId),
-                    backLink = controller.showFileUpload
-                  )
-                )
+                println("waiting view...")
+                Future.successful(waitingView(request.internalId)(request))
               }
-              case _ => InternalServerError("Missing file upload state")
+              case _ => Future.successful(InternalServerError("Missing file upload state"))
             }
           }
         case _ => Future.successful(InternalServerError("Missing file upload state"))
