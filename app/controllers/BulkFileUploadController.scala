@@ -21,7 +21,6 @@ import connectors.{UpscanInitiateConnector, UpscanInitiateRequest}
 import controllers.actions._
 import javax.inject.Inject
 import models.{CustomsRegulationType, NormalMode, S3UploadError, UserAnswers}
-import navigation.Navigator
 import pages.CustomsRegulationTypePage
 import play.api.data.Form
 import play.api.data.Forms.{mapping, nonEmptyText, optional, text}
@@ -35,18 +34,17 @@ import views.html.{BulkFileUploadView, WaitingForFileVerificationView}
 import scala.concurrent.{ExecutionContext, Future}
 
 class BulkFileUploadController @Inject()(
-                                        override val messagesApi: MessagesApi,
-                                        appConfig: FrontendAppConfig,
-                                        identify: IdentifierAction,
-                                        getData: DataRetrievalAction,
-                                        requireData: DataRequiredAction,
-                                        sessionRepository: SessionRepository,
-                                        navigator: Navigator,
-                                        upscanInitiateConnector: UpscanInitiateConnector,
-                                        val controllerComponents: MessagesControllerComponents,
-                                        waitingForFileVerificationView: WaitingForFileVerificationView,
-                                        view: BulkFileUploadView
-                                      )(implicit ec: ExecutionContext) extends FrontendBaseController with I18nSupport with FileUploadService {
+                                          override val messagesApi: MessagesApi,
+                                          appConfig: FrontendAppConfig,
+                                          identify: IdentifierAction,
+                                          getData: DataRetrievalAction,
+                                          requireData: DataRequiredAction,
+                                          sessionRepository: SessionRepository,
+                                          upscanInitiateConnector: UpscanInitiateConnector,
+                                          val controllerComponents: MessagesControllerComponents,
+                                          waitingForFileVerificationView: WaitingForFileVerificationView,
+                                          view: BulkFileUploadView
+                                        )(implicit ec: ExecutionContext) extends FrontendBaseController with I18nSupport with FileUploadService {
 
   final val COOKIE_JSENABLED = "jsenabled"
   final val controller = routes.FileUploadController
@@ -56,9 +54,8 @@ class BulkFileUploadController @Inject()(
 
   //GET /file-upload
   val showFileUpload: Action[AnyContent] = (identify andThen getData andThen requireData).async { implicit request =>
-    val state = request.userAnswers.fileUploadState
     for {
-      fileUploadState <- initiateFileUpload(upscanRequest(request.internalId, request.userAnswers))(upscanInitiateConnector.initiate(_))(state)
+      fileUploadState <- initiateFileUpload(upscanRequest(request.internalId, request.userAnswers))(upscanInitiateConnector.initiate(_))(None)
       res <- updateSession(fileUploadState, Some(request.userAnswers))
       if (res)
     } yield renderState(request.userAnswers,fileUploadState)
@@ -72,7 +69,7 @@ class BulkFileUploadController @Inject()(
 
   final def successRedirect(id: String, userAnswers: UserAnswers)(implicit rh: RequestHeader) = appConfig.baseExternalCallbackUrl + (rh.cookies.get(COOKIE_JSENABLED) match {
     case Some(_) => getBulkEntryDetails(userAnswers)
-    case None => getBulkEntryDetails(userAnswers)
+    case None => controller.showWaitingForFileVerification
   })
 
   final def errorRedirect(id: String)(implicit rh: RequestHeader) =
@@ -90,12 +87,6 @@ class BulkFileUploadController @Inject()(
       maximumFileSize = Some(appConfig.fileFormats.maxFileSizeMb * 1024 * 1024),
       expectedContentType = Some(appConfig.fileFormats.approvedFileTypes)
     )
-  }
-
-  private def sessionState(id: String): Future[SessionState] = {
-    for {
-      u <- sessionRepository.get(id)
-    } yield (SessionState(u.flatMap(_.fileUploadState), u))
   }
 
   final def renderState(userAnswers: UserAnswers, fileUploadState: FileUploadState, formWithErrors: Option[Form[_]] = None)(implicit request: Request[_]): Result = {
@@ -143,9 +134,6 @@ class BulkFileUploadController @Inject()(
   )
   private def getBulkEntryDetails(answers: UserAnswers): Call = answers.get(CustomsRegulationTypePage) match {
     case Some(CustomsRegulationType.UnionsCustomsCodeRegulation)  => routes.ArticleTypeController.onPageLoad(NormalMode)
-    case _ => {
-      val value = answers.get(CustomsRegulationTypePage)
-println("value.........................."+value)
-      routes.EntryDetailsController.onPageLoad(NormalMode)}
+    case _ => routes.EntryDetailsController.onPageLoad(NormalMode)
   }
 }
