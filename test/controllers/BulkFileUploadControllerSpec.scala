@@ -119,10 +119,8 @@ class BulkFileUploadControllerSpec extends SpecBase with MockitoSugar {
 
       running(application) {
         val request = FakeRequest(GET, uploadFile)
-
         val result = route(application, request).value
-
-        redirectLocation(result) mustEqual Some(routes.EntryDetailsController.onPageLoad(NormalMode).url)
+        status(result) mustEqual 200
       }
       application.stop()
     }
