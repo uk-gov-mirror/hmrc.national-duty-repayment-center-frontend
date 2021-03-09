@@ -19,7 +19,6 @@ package forms
 import java.time.LocalDate
 import formats.Format
 import javax.inject.Inject
-import forms.mappings.Mappings
 import models.EntryDetails
 import play.api.data.Form
 import play.api.data.Forms._
@@ -30,6 +29,9 @@ class EntryDetailsFormProvider @Inject() extends Mappings {
 
     val limitDate = LocalDate.now.minusDays(1)
     val minDateLimit = LocalDate.parse("1900-01-01")
+
+    //def isValidMonth(month: String) = isInRange(toInt(month), 1, 12)
+
 
     Form(
       mapping(
@@ -46,7 +48,10 @@ class EntryDetailsFormProvider @Inject() extends Mappings {
           invalidKey     = "entryDetails.claimEntryDate.error.invalid",
           allRequiredKey = "entryDetails.claimEntryDate.error.required.all",
           twoRequiredKey = "entryDetails.claimEntryDate.error.required",
-          requiredKey    = "entryDetails.claimEntryDate.error.required"
+          requiredKey    = "entryDetails.claimEntryDate.error.required",
+          dayRequiredKey = "entryDetails.claimEntryDate.error.required.day",
+          monthRequiredKey = "entryDetails.claimEntryDate.error.required.month",
+          yearRequiredKey = "entryDetails.claimEntryDate.error.required.year"
         ).verifying(maxDate(limitDate, "entryDetails.claimEntryDate.error.invalid", Format.formattedDate(limitDate)))
           .verifying(minDate(minDateLimit, "entryDetails.claimEntryDate.error.invalid", Format.formattedDate(minDateLimit)))
 

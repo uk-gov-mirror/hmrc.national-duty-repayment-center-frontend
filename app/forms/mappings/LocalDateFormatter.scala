@@ -28,6 +28,9 @@ private[mappings] class LocalDateFormatter(
                                             allRequiredKey: String,
                                             twoRequiredKey: String,
                                             requiredKey: String,
+                                            dayRequiredKey: String,
+                                            monthRequiredKey: String,
+                                            yearRequiredKey: String,
                                             args: Seq[String] = Seq.empty
                                           ) extends Formatter[LocalDate] with Formatters {
 
@@ -71,10 +74,16 @@ private[mappings] class LocalDateFormatter(
       .toList
 
     fields.count(_._2.isDefined) match {
-      case 3 =>
+      case 6 =>
         formatDate(key, data).left.map {
           _.map(_.copy(key = key, args = args))
         }
+      case 5 =>
+        Left(List(FormError(key, yearRequiredKey, missingFields ++ args)))
+      case 4 =>
+        Left(List(FormError(key, monthRequiredKey, missingFields ++ args)))
+      case 3 =>
+        Left(List(FormError(key, dayRequiredKey, missingFields ++ args)))
       case 2 =>
         Left(List(FormError(key, requiredKey, missingFields ++ args)))
       case 1 =>

@@ -687,3 +687,7 @@ your.details.checkYourAnswersLabel = Your details
 contact.details.checkYourAnswersLabel = Contact details
 payment.information.checkYourAnswersLabel = Payment information
 importer.details.checkYourAnswersLabel = Importer details
+
+entryDetails.claimEntryDate.day.error.invalid = Enter the day in the correct format
+entryDetails.claimEntryDate.month.error.invalid = Enter the month in the correct format
+entryDetails.claimEntryDate.year.error.invalid = Enter the year in the correct format

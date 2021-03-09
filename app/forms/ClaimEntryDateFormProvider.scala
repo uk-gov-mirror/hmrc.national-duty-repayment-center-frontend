@@ -30,7 +30,10 @@ class ClaimEntryDateFormProvider @Inject() extends Mappings {
         invalidKey     = "claimEntryDate.error.invalid",
         allRequiredKey = "claimEntryDate.error.required.all",
         twoRequiredKey = "claimEntryDate.error.required.two",
-        requiredKey    = "claimEntryDate.error.required"
+        requiredKey    = "claimEntryDate.error.required",
+        dayRequiredKey = "entryDetails.claimEntryDate.day.error.invalid",
+        monthRequiredKey = "entryDetails.claimEntryDate.month.error.invalid",
+        yearRequiredKey = "entryDetails.claimEntryDate.year.error.invalid"
       )
     )
 }
