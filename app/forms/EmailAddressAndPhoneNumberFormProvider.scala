@@ -17,19 +17,14 @@
 package forms
 
 import forms.mappings.Mappings
-import models.{AmendCaseResponseType, IsContactProvided}
+import models.{AmendCaseResponseType, EmailAndPhoneNumberType, IsContactProvided}
 import play.api.data.{Form, Mapping}
 import play.api.data.Forms.{mapping, set}
 import play.api.libs.json.{Json, OFormat}
 import uk.gov.voa.play.form.{Condition, ConditionalMapping, MandatoryOptionalMapping}
 import uk.gov.voa.play.form.ConditionalMappings.{mandatoryAndOnlyIfAnyOf, mandatoryIfEqual, mandatoryIfEqualToAny, mandatoryIfTrue}
-
 import javax.inject.Inject
 
-case class EmailAndPhoneNumber(emailOrPhone: Set[IsContactProvided], email: Option[String], phone: Option[String])
-object EmailAndPhoneNumber {
-  implicit val format: OFormat[EmailAndPhoneNumber] = Json.format[EmailAndPhoneNumber]
-}
 
 class EmailAddressAndPhoneNumberFormProvider @Inject() extends Mappings with TrimWhitespace {
 
@@ -41,10 +36,12 @@ class EmailAddressAndPhoneNumberFormProvider @Inject() extends Mappings with Tri
   def mandatoryIfContains[T](condition: Condition, mapping: Mapping[T]) =
     ConditionalMapping(condition, MandatoryOptionalMapping(mapping, Nil), None, Seq.empty)
 
-  def apply(): Form[EmailAndPhoneNumber] =
+  def apply(): Form[EmailAndPhoneNumberType] =
     Form( mapping(
-      "value" -> set(enumerable[IsContactProvided]("isContactProvided.error.selection.required")).verifying(nonEmptySet("isContactProvided.error.selection.required")),
-      "email" ->  mandatoryIfContains(contains("value", "01"),
+      "email" -> set(enumerable[IsContactProvided]("isContactProvided.error.selection.required"))
+        .verifying(nonEmptySet("isContactProvided.error.selection.required")),
+      "email" ->  mandatoryIfContains(contains("email", "01"),
+
         emailAddressMapping(
           "isContactProvided.error.length",
           "isContactProvided.error.invalid",
@@ -57,6 +54,6 @@ class EmailAddressAndPhoneNumberFormProvider @Inject() extends Mappings with Tri
           maxLength(11, "phoneNumber.error.length"),
           regexp(Validation.phoneNumberPattern,"phoneNumber.error.invalid")
         )))
-    )(EmailAndPhoneNumber.apply)(EmailAndPhoneNumber.unapply)
+    )(EmailAndPhoneNumberType.apply)(EmailAndPhoneNumberType.unapply)
     )
 }

@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-package pages
+package models
 
-import models.EmailAndPhoneNumberType
-import play.api.libs.json.JsPath
+import play.api.libs.json.{Json, OFormat}
 
-case object EmailAddressAndPhoneNumberPage extends QuestionPage[EmailAndPhoneNumberType] {
 
-  override def path: JsPath = JsPath \ toString
+case class EmailAndPhoneNumberType(emailOrPhone: Set[IsContactProvided], email: Option[String], phone: Option[String])
 
-  override def toString: String = "isContactProvided"
-
+object EmailAndPhoneNumberType {
+  implicit val format: OFormat[EmailAndPhoneNumberType] =
+    Json.format[EmailAndPhoneNumberType]
 }
